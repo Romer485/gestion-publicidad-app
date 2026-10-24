@@ -1,0 +1,22 @@
+{
+  "name": "GEMA",
+  "short_name": "GEMA",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0A1F44",
+  "theme_color": "#0A1F44",
+  "icons": [
+    {
+      "src": "icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "logo.webp",
+      "sizes": "1536x1024",
+      "type": "image/webp",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#F3F5F9">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icono.svg" type="image/svg+xml">
+<title>GEMA</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #F3F5F9; }
+  #cargando { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px; background: radial-gradient(ellipse, #fff 60%, #E8EEF7); color: #5B6B82; font: 600 15px system-ui, sans-serif; text-align: center; }
+  #cargando img { display: block; width: 260px; max-width: 80vw; height: auto; object-fit: contain; }
+  @media (max-width: 899px) { #cargando img { width: 200px; } }
+  #cargando button { background: #F47A20; color: #fff; border: 0; border-radius: 10px; padding: 10px 18px; font-weight: 700; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="cargando"><img src="logo.webp" alt="GEMA"><div id="msg">Cargando…</div></div>
+<script>
+// ============================================================
+//  LANZADOR (adaptado de GEMA). Funciona con y sin internet:
+//  con internet descarga la última versión de la app desde Apps Script y la guarda en el equipo;
+//  sin internet abre la copia guardada. Los datos van por la API de Apps Script.
+// ============================================================
+var URL_API = 'https://script.google.com/macros/s/AKfycbyja5xb-wJF7sF6fieXeHOV7un4FcIlXelBdVabo3uYaRG-nQ7GnfEHTCVeE-VXrDAe/exec';
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+
+function db() {
+  return new Promise(function (ok, ko) {
+    var rq = indexedDB.open('gp_local', 1);
+    rq.onupgradeneeded = function () { rq.result.createObjectStore('kv'); };
+    rq.onsuccess = function () { ok(rq.result); };
+    rq.onerror = function () { ko(rq.error); };
+  });
+}
+function idb(modo, fn) {
+  return db().then(function (d) {
+    return new Promise(function (ok) {
+      var t = d.transaction('kv', modo), r = fn(t.objectStore('kv'));
+      t.oncomplete = function () { ok(r && r.result); };
+      t.onerror = function () { ok(undefined); };
+    });
+  }).catch(function () { return undefined; });
+}
+
+function bajarHtml(ms) {
+  var ctrl = new AbortController(), tm = setTimeout(function () { ctrl.abort(); }, ms);
+  return fetch(URL_API + '?modo=html&t=' + Date.now(), {redirect: 'follow', cache: 'no-store', signal: ctrl.signal})
+    .then(function (r) { clearTimeout(tm); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(function (t) { if (t.indexOf('GESTION_PUBLICIDAD') < 0) throw new Error('Respuesta inesperada'); return t; });
+}
+
+function abrir(html) {
+  var cfg = '<script>window.GP_SHELL=true;window.GP_URL_API=' + JSON.stringify(URL_API) + ';<\/script>';
+  html = html.replace(/<head([^>]*)>/i, '<head$1>' + cfg);
+  document.open(); document.write(html); document.close();
+}
+
+function sinCopia() {
+  var m = document.getElementById('msg');
+  m.textContent = 'No se pudo descargar la app. Revisa la conexión y vuelve a intentar.';
+  var b = document.createElement('button');
+  b.textContent = 'Reintentar';
+  b.onclick = function () { location.reload(); };
+  m.parentNode.appendChild(b);
+}
+
+idb('readonly', function (s) { return s.get('app_html'); }).then(function (copia) {
+  if (!navigator.onLine && copia) return abrir(copia);
+  return bajarHtml(copia ? 8000 : 30000).then(function (html) {
+    return idb('readwrite', function (s) { s.put(html, 'app_html'); }).then(function () { abrir(html); });
+  }, function () { if (copia) abrir(copia); else sinCopia(); });
+});
+</script>
+</body>
+</html>
