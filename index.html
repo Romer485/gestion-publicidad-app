@@ -27,29 +27,50 @@ var URL_API = 'https://script.google.com/macros/s/AKfycbyja5xb-wJF7sF6fieXeHOV7u
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
 
-function db() {
-  return new Promise(function (ok, ko) {
-    var rq = indexedDB.open('gp_local', 1);
-    rq.onupgradeneeded = function () { rq.result.createObjectStore('kv'); };
-    rq.onsuccess = function () { ok(rq.result); };
-    rq.onerror = function () { ko(rq.error); };
-  });
-}
+var sinAlmacenamiento = false;
 function idb(modo, fn) {
-  return db().then(function (d) {
-    return new Promise(function (ok) {
-      var t = d.transaction('kv', modo), r = fn(t.objectStore('kv'));
-      t.oncomplete = function () { ok(r && r.result); };
-      t.onerror = function () { ok(undefined); };
-    });
-  }).catch(function () { return undefined; });
+  if (sinAlmacenamiento) return Promise.resolve(undefined);
+  return new Promise(function (ok) {
+    var terminado = false, d, t;
+    var tm = setTimeout(function () { terminar(undefined, true); }, 3000);
+    function terminar(valor, fallo) {
+      if (terminado) return;
+      terminado = true;
+      clearTimeout(tm);
+      if (fallo) {
+        sinAlmacenamiento = true;
+        if (t) { try { t.abort(); } catch (e) {} }
+      }
+      if (d) d.close();
+      ok(valor);
+    }
+    try {
+      var rq = indexedDB.open('gp_local', 1);
+      rq.onupgradeneeded = function () {
+        if (terminado) { rq.transaction.abort(); return; }
+        rq.result.createObjectStore('kv');
+      };
+      rq.onerror = rq.onblocked = function () { terminar(undefined, true); };
+      rq.onsuccess = function () {
+        d = rq.result;
+        if (terminado) { d.close(); return; }
+        try {
+          t = d.transaction('kv', modo);
+          var r = fn(t.objectStore('kv'));
+          t.oncomplete = function () { terminar(r && r.result, false); };
+          t.onerror = t.onabort = function () { terminar(undefined, true); };
+        } catch (e) { terminar(undefined, true); }
+      };
+    } catch (e) { terminar(undefined, true); }
+  });
 }
 
 function bajarHtml(ms) {
   var ctrl = new AbortController(), tm = setTimeout(function () { ctrl.abort(); }, ms);
   return fetch(URL_API + '?modo=html&t=' + Date.now(), {redirect: 'follow', cache: 'no-store', signal: ctrl.signal})
-    .then(function (r) { clearTimeout(tm); if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-    .then(function (t) { if (t.indexOf('GESTION_PUBLICIDAD') < 0) throw new Error('Respuesta inesperada'); return t; });
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(function (t) { if (t.indexOf('GESTION_PUBLICIDAD') < 0) throw new Error('Respuesta inesperada'); return t; })
+    .finally(function () { clearTimeout(tm); });
 }
 
 function abrir(html) {
