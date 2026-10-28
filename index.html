@@ -23,7 +23,10 @@
 //  con internet descarga la última versión de la app desde Apps Script y la guarda en el equipo;
 //  sin internet abre la copia guardada. Los datos van por la API de Apps Script.
 // ============================================================
-var URL_API = 'https://script.google.com/macros/s/AKfycbyja5xb-wJF7sF6fieXeHOV7un4FcIlXelBdVabo3uYaRG-nQ7GnfEHTCVeE-VXrDAe/exec';
+// ?demo=1 abre la copia de DEMOSTRACIÓN: otro servidor y otra base local en el equipo (nunca se mezcla con la real)
+var DEMO = /[?&]demo(=1)?(&|$)/.test(location.search);
+var URL_API = DEMO ? 'https://script.google.com/macros/s/AKfycbyPIhwwVANnJXPEGAWQrkjsGSz1ZpcJLQ-0oxJDRoXcka8_JYXGnFFd5avKOGhjr0WU/exec' : 'https://script.google.com/macros/s/AKfycbyja5xb-wJF7sF6fieXeHOV7un4FcIlXelBdVabo3uYaRG-nQ7GnfEHTCVeE-VXrDAe/exec';
+var DB_LOCAL = DEMO ? 'gp_local_demo' : 'gp_local';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
 
@@ -45,7 +48,7 @@ function idb(modo, fn) {
       ok(valor);
     }
     try {
-      var rq = indexedDB.open('gp_local', 1);
+      var rq = indexedDB.open(DB_LOCAL, 1);
       rq.onupgradeneeded = function () {
         if (terminado) { rq.transaction.abort(); return; }
         rq.result.createObjectStore('kv');
@@ -74,7 +77,7 @@ function bajarHtml(ms) {
 }
 
 function abrir(html) {
-  var cfg = '<script>window.GP_SHELL=true;window.GP_URL_API=' + JSON.stringify(URL_API) + ';<\/script>';
+  var cfg = '<script>window.GP_SHELL=true;window.GP_URL_API=' + JSON.stringify(URL_API) + ';window.GP_DB=' + JSON.stringify(DB_LOCAL) + ';window.GP_DEMO=' + DEMO + ';<\/script>';
   html = html.replace(/<head([^>]*)>/i, '<head$1>' + cfg);
   document.open(); document.write(html); document.close();
 }
